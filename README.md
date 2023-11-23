@@ -37,7 +37,7 @@ currency.
 
 Dash components.
 - Callback Function: Updates the graph based on user inputs (date, time span, currencies).
-- 
+  
 Customization
 Feel free to customize this application to meet your specific needs. You can modify the code
 to include additional features, change the layout, or enhance the visualizations.
@@ -46,5 +46,5 @@ Acknowledgments
 - [Dash Documentation](https://dash.plotly.com/)
 - [Plotly Documentation](https://plotly.com/python/)
 - [Pandas Documentation](https://pandas.pydata.org/pandas-docs/stable/)
-- 
+
 Happy coding!
