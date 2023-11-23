@@ -1,0 +1,192 @@
+
+import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output
+import pandas as pd
+import plotly.express as px
+from datetime import datetime, timedelta
+
+#creating a list of all csv files
+csv_files = ['Exchange_Rate_Report_2012.csv', 'Exchange_Rate_Report_2013.csv', 'Exchange_Rate_Report_2014.csv', 'Exchange_Rate_Report_2015.csv',
+             'Exchange_Rate_Report_2016.csv', 'Exchange_Rate_Report_2017.csv', 'Exchange_Rate_Report_2018.csv', 'Exchange_Rate_Report_2019.csv','Exchange_Rate_Report_2020.csv','Exchange_Rate_Report_2021.csv','Exchange_Rate_Report_2022.csv']
+
+# Create a single DataFrame from all CSV files
+df_list = [pd.read_csv(file) for file in csv_files]
+df = pd.concat(df_list, ignore_index=True)
+
+#including all currencies
+available_currencies = df.columns[1:]
+
+#cleaning the data (optional)
+def cleaning(column):
+    mean = df[column].mean()
+    df[column].fillna(mean, inplace=True)
+
+for i in available_currencies:
+    cleaning(i)
+
+#convert from string to datetime object
+df['Date'] = pd.to_datetime(df['Date'])
+
+# Create a Dash web application
+app = dash.Dash(__name__)
+
+# Layout of the web application
+app.layout = html.Div([
+    html.H1("Currency Exchange Rate Variation", style={'backgroundColor': 'black', 'color': 'white', 'textAlign': 'center', 'margin-bottom': '20px'}),
+
+    # Descriptive Text
+    html.P("Select a date, time span, and currencies to view exchange rate variation.", style={'margin-bottom': '20px'}),
+
+    # Container for the first box (Select a date)
+    html.Div([
+        # Move the label to the left side
+        html.Label("Select a date:", style={'display': 'inline-block', 'margin-right': '10px', 'width': '15%'}),
+
+        # Date Picker
+        dcc.DatePickerSingle(
+            id='date-picker',
+            min_date_allowed=df['Date'].min(),
+            max_date_allowed=df['Date'].max(),
+            initial_visible_month=df['Date'].max(),
+            date=df['Date'].max(),
+            style={'width': '80%', 'margin-bottom': '20px', 'display': 'inline-block'}  # Set width to 80% and display to 'inline-block'
+        ),
+    ], style={'width': '100%', 'margin-bottom': '20px'}),  # Set width to 100% for the container
+
+    # Dropdown for time span
+    dcc.Dropdown(
+        id='time-span-dropdown',
+        options=[
+            {'label': 'Weekly', 'value': '7D'},
+            {'label': 'Monthly', 'value': '30D'},
+            {'label': 'Quarterly', 'value': '90D'},
+            {'label': 'Yearly', 'value': '365D'}
+        ],
+        value=None,
+        style={'width': '100%', 'margin-bottom': '20px'},
+        placeholder="Select time span"
+    ),
+
+    # Dropdown for the first currency
+    dcc.Dropdown(
+        id='currency1-dropdown',
+        options=[{'label': currency, 'value': currency} for currency in available_currencies],
+        value=None,
+        style={'width': '100%', 'margin-bottom': '20px'},
+        placeholder="Select the first currency"
+    ),
+
+    # Dropdown for the second currency
+    dcc.Dropdown(
+        id='currency2-dropdown',
+        options=[{'label': currency, 'value': currency} for currency in available_currencies],
+        value=None,
+        style={'width': '100%', 'margin-bottom': '20px'},
+        placeholder="Select the second currency "
+    ),
+
+    # Graph to display the exchange rate variation
+    dcc.Graph(
+    id='exchange-rate-graph',
+    style={'margin-bottom': '20px'},
+    figure={
+        'data': [],
+        'layout': {
+            'annotations': [
+                {
+                    'x': 0.5,
+                    'y': -0.15,
+                    'xref': 'paper',
+                    'yref': 'paper',
+                    'showarrow': False,
+                    'font': {'size': 16},
+                    'text': ''
+                },
+                {
+                    'x': 0,
+                    'y': -0.2,
+                    'xref': 'paper',
+                    'yref': 'paper',
+                    'showarrow': False,
+                    'font': {'size': 14},
+                    'text': ''
+                }
+            ]
+        }
+    }
+)
+])
+
+# Callback to update the graph based on user inputs
+@app.callback(
+    Output('exchange-rate-graph', 'figure'),
+    [Input('date-picker', 'date'),
+     Input('time-span-dropdown', 'value'),
+     Input('currency1-dropdown', 'value'),
+     Input('currency2-dropdown', 'value')]
+)
+def update_graph(selected_date, time_span, currency1, currency2):
+
+    selected_date = pd.to_datetime(selected_date)
+
+    # Check if time_span is None
+    if time_span is None:
+        # Handle the case where time_span is not selected
+        start_date = selected_date
+    else:
+        start_date = selected_date - pd.to_timedelta(time_span)
+
+    if currency2:
+        filtered_df = df[(df['Date'] >= start_date) & (df['Date'] <= selected_date)]
+        y_values = [f'{currency1}', f'{currency2}']
+    else:
+        filtered_df = df[df['Date'] == selected_date]
+        y_values = [f'{currency1}']
+
+    # Check if both currency dropdowns are None or if y_values does not have the expected length
+    if (currency1 is None and currency2 is None) or len(y_values) < 2:
+        return px.line(title='Select currencies to view exchange rate variation')
+
+    fig = px.line(filtered_df, x='Date', y=y_values,
+                  labels={'Date': 'Date', f'{currency1}': f'{currency1}', f'{currency2}': f'{currency2}'},
+                  title=f'Exchange Rate Variation ({currency1 if currency1 else ""} and {currency2 if currency2 else ""})')
+
+    # Find the date of the maximum and minimum values
+    if len(y_values) > 1:
+        max_date_idx = filtered_df[y_values[1]].idxmax()
+        min_date_idx = filtered_df[y_values[1]].idxmin()
+        max_date = filtered_df.loc[max_date_idx]['Date']
+        min_date = filtered_df.loc[min_date_idx]['Date']
+
+        return {
+            'data': fig['data'],
+            'layout': {
+                'annotations': [
+                    {
+                        'x': 0.5,
+                        'y': -0.2,
+                        'xref': 'paper',
+                        'yref': 'paper',
+                        'showarrow': False,
+                        'font': {'size': 14},
+                        'text': f'Start Date: {filtered_df["Date"].min().date()} | End Date: {filtered_df["Date"].max().date()}'
+                    },
+                    {
+                        'x': 0,
+                        'y': -0.3,
+                        'xref': 'paper',
+                        'yref': 'paper',
+                        'showarrow': False,
+                        'font': {'size': 14},
+                        'text': f'Highest Value: {max_date} ({filtered_df[y_values[1]].max():.2f}) | Lowest Value: {min_date} ({filtered_df[y_values[1]].min():.2f})'
+                    }
+                ]
+            }
+        }
+
+    return fig  # Return empty string if y_values does not have the expected length
+
+# Run the app
+if __name__ == '__main__':
+    app.run_server(debug=True, port=8070)
